@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:sysmonitor/src/rust/api/simple.dart';
 import 'package:sysmonitor/src/rust/frb_generated.dart';
+import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
 
 Future<void> main() async {
   await RustLib.init();
@@ -90,19 +92,20 @@ class _MainPageState extends State<MainPage> {
     refresh();
   }
 
-  DataColumn _createDataColumn(String name, SortBy sorting) {
-    return DataColumn(
-      onSort: (columnIndex, ascending) {
-        updateSorting(sorting);
-      },
-      label: Row(
-        children: [
-          Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-          if (sortBy == sorting && sortOrder == SortOrder.desc)
-            const Icon(Icons.arrow_drop_down),
-          if (sortBy == sorting && sortOrder == SortOrder.asc)
-            const Icon(Icons.arrow_drop_up),
-        ],
+  Widget _createHeaderItem(String name, SortBy sorting) {
+    return InkWell(
+      onTap: () => updateSorting(sorting),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Row(
+          children: [
+            Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (sortBy == sorting && sortOrder == SortOrder.desc)
+              const Icon(Icons.arrow_drop_down),
+            if (sortBy == sorting && sortOrder == SortOrder.asc)
+              const Icon(Icons.arrow_drop_up),
+          ],
+        ),
       ),
     );
   }
@@ -123,69 +126,130 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
+  String _getCpuUsage(double cpu) {
+    String cpuUsage = "";
+    if (cpu > 0) {
+      cpuUsage = cpu.toStringAsFixed(1);
+      if (cpuUsage == "0.0") cpuUsage = "";
+    }
+    return cpuUsage;
+  }
+
+  TableViewCell _buildCell(BuildContext context, TableVicinity vicinity) {
+    int row = vicinity.row;
+    int column = vicinity.column;
+
+    if (row == 0) {
+      return TableViewCell(
+        child: switch (column) {
+          0 => _createHeaderItem("PID", SortBy.name),
+          1 => _createHeaderItem("Name", SortBy.name),
+          2 => _createHeaderItem("CPU", SortBy.cpu),
+          3 => _createHeaderItem("Memory", SortBy.memory),
+          _ => throw "Invalid column"
+        },
+      );
+    }
+    row = row - 1;
+
+    return TableViewCell(
+      child: switch (column) {
+        0 => Padding(
+            padding: const EdgeInsets.only(left: 4.0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(processes[row].pid.toString()),
+            ),
+          ),
+        1 => Align(
+            alignment: Alignment.centerLeft,
+            child: Text(processes[row].name),
+          ),
+        2 => Align(
+            alignment: Alignment.centerLeft,
+            child: Text(_getCpuUsage(processes[row].cpuUsage)),
+          ),
+        3 => Align(
+            alignment: Alignment.centerLeft,
+            child: Text(memoryString(processes[row].memoryUsage)),
+          ),
+        _ => throw "Invalid column"
+      },
+    );
+  }
+
+  TableSpan _buildColumnSpan(int index) {
+    return switch (index % 4) {
+      0 => const TableSpan(extent: FixedTableSpanExtent(100)),
+      1 => const TableSpan(extent: FractionalTableSpanExtent(0.5)),
+      2 => const TableSpan(extent: FixedTableSpanExtent(120)),
+      3 => const TableSpan(extent: RemainingSpanExtent()),
+      _ => throw AssertionError(
+          'This should be unreachable, as every index is accounted for in the '
+          'switch clauses.',
+        ),
+    };
+  }
+
+  TableSpan _buildRowSpan(int index) {
+    final TableSpanDecoration decoration = TableSpanDecoration(
+      color: (index > 0 && processes[index - 1].pid == selectedPid)
+          ? Theme.of(context).colorScheme.inversePrimary.withOpacity(0.5)
+          : index == 0
+              ? Theme.of(context).colorScheme.secondary.withOpacity(0.4)
+              : null,
+      border: TableSpanBorder(
+        trailing: BorderSide(width: 1, color: Theme.of(context).dividerColor),
+      ),
+    );
+
+    return TableSpan(
+      backgroundDecoration: decoration,
+      extent: const FixedTableSpanExtent(32),
+      recognizerFactories: <Type, GestureRecognizerFactory>{
+        TapGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+          () => TapGestureRecognizer(),
+          (TapGestureRecognizer t) {
+            t.onTap = () {
+              if (index > 0) {
+                _onRowTapped(processes[index - 1].pid);
+              }
+            };
+          },
+        ),
+      },
+    );
+  }
+
+  ScrollController vscroll = ScrollController();
+  ScrollController hscroll = ScrollController();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
-        appBar: AppBar(title: const Text('')),
+        // appBar: AppBar(title: const Text('')),
         body: FutureBuilder(
           future: getProcessList(),
           builder: (context, snapshot) {
             if (snapshot.hasData) {
               final data = snapshot.data!;
-              return SingleChildScrollView(
-                scrollDirection: Axis.vertical,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: double.infinity),
-                  child: DataTable(
-                    dataRowMaxHeight: 32,
-                    dataRowMinHeight: 24,
-                    headingRowHeight: 32,
-                    headingRowColor: const WidgetStatePropertyAll(Colors.grey),
-                    columns: [
-                      _createDataColumn("Pid", SortBy.pid),
-                      _createDataColumn("Name", SortBy.name),
-                      _createDataColumn("CPU", SortBy.cpu),
-                      _createDataColumn("Memory", SortBy.memory),
-                    ],
-                    rows: data.map((p) {
-                      String cpuUsage = "";
-                      if (p.cpuUsage > 0) {
-                        cpuUsage = p.cpuUsage.toStringAsFixed(1);
-                        if (cpuUsage == "0.0") cpuUsage = "";
-                      }
-                      return DataRow(
-                        color: WidgetStateProperty.resolveWith<Color?>(
-                            (Set<WidgetState> states) {
-                          if (states.contains(WidgetState.selected)) {
-                            return Theme.of(context)
-                                .colorScheme
-                                .inversePrimary
-                                .withOpacity(0.5);
-                          }
-                          return null; // Use the default value.
-                        }),
-                        selected: p.pid == selectedPid,
-                        cells: [
-                          DataCell(
-                            onTap: () => _onRowTapped(p.pid),
-                            Text(p.pid.toString()),
-                          ),
-                          DataCell(
-                            onTap: () => _onRowTapped(p.pid),
-                            Text(p.name),
-                          ),
-                          DataCell(
-                            onTap: () => _onRowTapped(p.pid),
-                            Text(cpuUsage),
-                          ),
-                          DataCell(
-                            onTap: () => _onRowTapped(p.pid),
-                            Text(memoryString(p.memoryUsage)),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+              return Scrollbar(
+                controller: hscroll,
+                child: Scrollbar(
+                  controller: vscroll,
+                  child: TableView.builder(
+                    verticalDetails:
+                        ScrollableDetails.vertical(controller: vscroll),
+                    horizontalDetails:
+                        ScrollableDetails.horizontal(controller: hscroll),
+                    columnCount: 4,
+                    rowCount: data.length + 1,
+                    pinnedRowCount: 1,
+                    rowBuilder: _buildRowSpan,
+                    columnBuilder: _buildColumnSpan,
+                    cellBuilder: _buildCell,
                   ),
                 ),
               );
