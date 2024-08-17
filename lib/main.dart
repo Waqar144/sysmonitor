@@ -44,11 +44,26 @@ class _MainPageState extends State<MainPage> {
   SortBy sortBy = SortBy.cpu;
   SortOrder sortOrder = SortOrder.desc;
 
+  late final AppLifecycleListener _listener;
+
   @override
   void initState() {
     super.initState();
     reloadProcesses = true;
     t = Timer(const Duration(seconds: 1), () {});
+
+    _listener = AppLifecycleListener(
+      onResume: refresh,
+      onHide: () => t.cancel(),
+      onInactive: () => t.cancel(),
+      onPause: () => t.cancel(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _listener.dispose();
+    super.dispose();
   }
 
   void refresh() {
