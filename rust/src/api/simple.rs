@@ -100,6 +100,13 @@ impl MySystem {
             })
             .unwrap_or(false)
     }
+
+    pub fn parent_pid(&self, pid: u32) -> Option<u32> {
+        self.sys
+            .process(Pid::from_u32(pid))
+            .and_then(|p| p.parent())
+            .map(|parent_pid| parent_pid.as_u32())
+    }
 }
 
 #[flutter_rust_bridge::frb(init)]

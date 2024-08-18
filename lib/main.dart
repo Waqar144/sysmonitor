@@ -279,31 +279,39 @@ class _MainPageState extends State<MainPage> {
       ),
       children: [
         MenuItemButton(
-            child: SubmenuButton(
-              alignmentOffset: const Offset(150, 0),
-              menuChildren: [
-                ...Signal.values.map((s) {
-                  return MenuItemButton(
-                    child: Text(s.signalName),
-                    onPressed: () {
-                      ContextMenuController.removeAny();
-                      sys!.sendSignal(pid: selectedPid, signal: s);
-                    },
-                  );
-                })
-              ],
-              leadingIcon: const SizedBox(width: 16),
-              trailingIcon: const Icon(Icons.arrow_right),
-              child: const Text("Send Signal"),
-            ),
-            onPressed: () {
-              ContextMenuController.removeAny();
-            }),
+          child: SubmenuButton(
+            alignmentOffset: const Offset(150, 0),
+            menuChildren: [
+              ...Signal.values.map((s) {
+                return MenuItemButton(
+                  child: Text(s.signalName),
+                  onPressed: () {
+                    ContextMenuController.removeAny();
+                    sys!.sendSignal(pid: selectedPid, signal: s);
+                  },
+                );
+              })
+            ],
+            leadingIcon: const SizedBox(width: 16),
+            trailingIcon: const Icon(Icons.arrow_right),
+            child: const Text("Send Signal"),
+          ),
+        ),
         MenuItemButton(
             leadingIcon: const Icon(Icons.move_up),
             child: const Text("Jump to Parent"),
-            onPressed: () {
+            onPressed: () async {
               ContextMenuController.removeAny();
+              final parentPid = await sys?.parentPid(pid: selectedPid);
+              if (parentPid != null) {
+                int x = processes.indexWhere((p) {
+                  return p.pid == parentPid;
+                });
+                if (x != -1) {
+                  _onRowTapped(parentPid);
+                  vscroll.jumpTo(32 * x.toDouble());
+                }
+              }
             }),
         MenuItemButton(
             leadingIcon: const Icon(Icons.close),
