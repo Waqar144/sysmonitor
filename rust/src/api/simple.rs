@@ -1,4 +1,4 @@
-use sysinfo::System;
+use sysinfo::{Pid, System};
 
 #[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
 pub fn greet(name: String) -> String {
@@ -10,7 +10,7 @@ pub struct MySystem {
 }
 
 pub struct MyProcess {
-    pub pid: usize,
+    pub pid: u32,
     pub name: String,
     pub cpu_usage: f32,
     pub memory_usage: u64,
@@ -26,6 +26,15 @@ pub enum SortBy {
 pub enum SortOrder {
     Asc,
     Desc,
+}
+
+pub enum Signal {
+    Terminate,
+    Kill,
+    Hangup,
+    Continue,
+    Stop,
+    Interrupt,
 }
 
 impl MySystem {
@@ -50,7 +59,7 @@ impl MySystem {
             };
 
             ret.push(MyProcess {
-                pid: p.1.pid().into(),
+                pid: p.1.pid().as_u32(),
                 name: p.1.name().to_str().unwrap().to_string(),
                 cpu_usage: p.1.cpu_usage() / self.sys.cpus().len() as f32,
                 memory_usage: p.1.memory(),
@@ -76,6 +85,20 @@ impl MySystem {
             }
         }
         ret
+    }
+
+    pub fn send_signal(&self, pid: u32, signal: Signal) -> bool {
+        self.sys
+            .process(Pid::from_u32(pid))
+            .and_then(|p| match signal {
+                Signal::Terminate => p.kill_with(sysinfo::Signal::Term),
+                Signal::Kill => p.kill_with(sysinfo::Signal::Kill),
+                Signal::Hangup => p.kill_with(sysinfo::Signal::Hangup),
+                Signal::Continue => p.kill_with(sysinfo::Signal::Continue),
+                Signal::Stop => p.kill_with(sysinfo::Signal::Stop),
+                Signal::Interrupt => p.kill_with(sysinfo::Signal::Interrupt),
+            })
+            .unwrap_or(false)
     }
 }
 

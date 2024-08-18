@@ -18,11 +18,18 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'System Monitor',
+      title: 'Quran Revision Companion',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightBlue),
         useMaterial3: true,
+        colorSchemeSeed: Colors.blue,
       ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        useMaterial3: true,
+        colorSchemeSeed: Colors.lightBlue,
+      ),
+      themeMode: ThemeMode.light,
       home: const MainPage(),
     );
   }
@@ -39,7 +46,7 @@ class _MainPageState extends State<MainPage> {
   late Timer t;
   MySystem? sys;
   List<MyProcess> processes = [];
-  BigInt selectedPid = BigInt.from(0);
+  int selectedPid = -1;
   bool reloadProcesses = false;
   SortBy sortBy = SortBy.cpu;
   SortOrder sortOrder = SortOrder.desc;
@@ -72,7 +79,7 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
-  void _onRowTapped(BigInt pid) {
+  void _onRowTapped(int pid) {
     setState(() {
       selectedPid = pid;
     });
@@ -209,7 +216,7 @@ class _MainPageState extends State<MainPage> {
   TableSpan _buildRowSpan(int index) {
     final TableSpanDecoration decoration = TableSpanDecoration(
       color: (index > 0 && processes[index - 1].pid == selectedPid)
-          ? Theme.of(context).colorScheme.inversePrimary.withOpacity(0.5)
+          ? Theme.of(context).colorScheme.inversePrimary
           : index == 0
               ? Theme.of(context).colorScheme.secondary.withOpacity(0.4)
               : null,
@@ -242,39 +249,48 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        // appBar: AppBar(title: const Text('')),
-        body: FutureBuilder(
-          future: getProcessList(),
-          builder: (context, snapshot) {
-            if (snapshot.hasData) {
-              final data = snapshot.data!;
-              return Scrollbar(
-                controller: hscroll,
-                child: Scrollbar(
-                  controller: vscroll,
-                  child: TableView.builder(
-                    verticalDetails:
-                        ScrollableDetails.vertical(controller: vscroll),
-                    horizontalDetails:
-                        ScrollableDetails.horizontal(controller: hscroll),
-                    columnCount: 4,
-                    rowCount: data.length + 1,
-                    pinnedRowCount: 1,
-                    rowBuilder: _buildRowSpan,
-                    columnBuilder: _buildColumnSpan,
-                    cellBuilder: _buildCell,
-                  ),
+    return Scaffold(
+      // appBar: AppBar(title: const Text('')),
+      body: FutureBuilder(
+        future: getProcessList(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            final data = snapshot.data!;
+            return Scrollbar(
+              controller: hscroll,
+              child: Scrollbar(
+                controller: vscroll,
+                child: TableView.builder(
+                  verticalDetails:
+                      ScrollableDetails.vertical(controller: vscroll),
+                  horizontalDetails:
+                      ScrollableDetails.horizontal(controller: hscroll),
+                  columnCount: 4,
+                  rowCount: data.length + 1,
+                  pinnedRowCount: 1,
+                  rowBuilder: _buildRowSpan,
+                  columnBuilder: _buildColumnSpan,
+                  cellBuilder: _buildCell,
                 ),
-              );
-            } else if (snapshot.hasError) {
-              return Center(child: Text("Error: ${snapshot.error}"));
-            }
-            return const Center(child: Text("Loading"));
-          },
-        ),
+              ),
+            );
+          } else if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
+          return const Center(child: Text("Loading"));
+        },
       ),
+      persistentFooterButtons: [
+        ElevatedButton.icon(
+          icon: const Icon(Icons.close),
+          label: const Text("End Process"),
+          onPressed: selectedPid == -1
+              ? null
+              : () {
+                  sys?.sendSignal(pid: selectedPid, signal: Signal.terminate);
+                },
+        )
+      ],
     );
   }
 }
