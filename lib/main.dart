@@ -6,6 +6,19 @@ import 'package:sysmonitor/src/rust/api/simple.dart';
 import 'package:sysmonitor/src/rust/frb_generated.dart';
 import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
 
+extension SignalName on Signal {
+  String get signalName {
+    return switch (this) {
+      Signal.terminate => "Terminate (SIGTERM)",
+      Signal.kill => "Kill (SIGKILL)",
+      Signal.hangup => "Hangup (SIGHUP)",
+      Signal.continue_ => "Continue (SIGCONT)",
+      Signal.stop => "Stop (SIGSTOP)",
+      Signal.interrupt => "Interrupt (SIGINT)",
+    };
+  }
+}
+
 Future<void> main() async {
   await RustLib.init();
   runApp(const MyApp());
@@ -50,6 +63,7 @@ class _MainPageState extends State<MainPage> {
   bool reloadProcesses = false;
   SortBy sortBy = SortBy.cpu;
   SortOrder sortOrder = SortOrder.desc;
+  final ContextMenuController _contextMenuController = ContextMenuController();
 
   late final AppLifecycleListener _listener;
 
@@ -234,13 +248,71 @@ class _MainPageState extends State<MainPage> {
           () => TapGestureRecognizer(),
           (TapGestureRecognizer t) {
             t.onTap = () {
+              if (_contextMenuController.isShown) {
+                _contextMenuController.remove();
+              }
+
               if (index > 0) {
                 _onRowTapped(processes[index - 1].pid);
               }
             };
+            t.onSecondaryTapUp = (details) {
+              //no ctx menu for header
+              if (index <= 0) return;
+              _onRowTapped(processes[index - 1].pid);
+              _contextMenuController.show(
+                context: context,
+                contextMenuBuilder: (ctx) =>
+                    _onContextMenuRequested(ctx, details.globalPosition),
+              );
+            };
           },
         ),
       },
+    );
+  }
+
+  Widget _onContextMenuRequested(BuildContext context, Offset offset) {
+    return AdaptiveTextSelectionToolbar(
+      anchors: TextSelectionToolbarAnchors(
+        primaryAnchor: offset,
+      ),
+      children: [
+        MenuItemButton(
+            child: SubmenuButton(
+              alignmentOffset: const Offset(150, 0),
+              menuChildren: [
+                ...Signal.values.map((s) {
+                  return MenuItemButton(
+                    child: Text(s.signalName),
+                    onPressed: () {
+                      ContextMenuController.removeAny();
+                      sys!.sendSignal(pid: selectedPid, signal: s);
+                    },
+                  );
+                })
+              ],
+              leadingIcon: const SizedBox(width: 16),
+              trailingIcon: const Icon(Icons.arrow_right),
+              child: const Text("Send Signal"),
+            ),
+            onPressed: () {
+              ContextMenuController.removeAny();
+            }),
+        MenuItemButton(
+            leadingIcon: const Icon(Icons.move_up),
+            child: const Text("Jump to Parent"),
+            onPressed: () {
+              ContextMenuController.removeAny();
+            }),
+        MenuItemButton(
+            leadingIcon: const Icon(Icons.close),
+            child: const Text("End Process"),
+            onPressed: () {
+              ContextMenuController.removeAny();
+              sys!.sendSignal(pid: selectedPid, signal: Signal.terminate);
+            }),
+      ],
     );
   }
 
