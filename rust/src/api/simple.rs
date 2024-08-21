@@ -51,18 +51,18 @@ impl MySystem {
         );
         let processes = self.sys.processes();
         let mut ret = Vec::new();
-        for p in processes {
-            match p.1.thread_kind() {
+        for (_, p) in processes {
+            match p.thread_kind() {
                 Some(sysinfo::ThreadKind::Kernel) => continue,
                 Some(sysinfo::ThreadKind::Userland) => continue,
                 None => (),
             };
 
             ret.push(MyProcess {
-                pid: p.1.pid().as_u32(),
-                name: p.1.name().to_str().unwrap().to_string(),
-                cpu_usage: p.1.cpu_usage() / self.sys.cpus().len() as f32,
-                memory_usage: p.1.memory(),
+                pid: p.pid().as_u32(),
+                name: p.name().to_str().unwrap().to_string(),
+                cpu_usage: p.cpu_usage() / self.sys.cpus().len() as f32,
+                memory_usage: p.memory(),
             });
         }
 
