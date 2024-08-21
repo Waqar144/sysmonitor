@@ -1,4 +1,4 @@
-use sysinfo::{Pid, System};
+use sysinfo::{Networks, Pid, System};
 
 #[flutter_rust_bridge::frb(sync)] // Synchronous mode for simplicity of the demo
 pub fn greet(name: String) -> String {
@@ -7,6 +7,7 @@ pub fn greet(name: String) -> String {
 
 pub struct MySystem {
     sys: System,
+    net: Networks,
 }
 
 pub struct MyProcess {
@@ -14,6 +15,15 @@ pub struct MyProcess {
     pub name: String,
     pub cpu_usage: f32,
     pub memory_usage: u64,
+}
+
+pub struct ProcessDetails {
+    pub cmd: String,
+    pub virtual_memory: u64,
+    pub disk_read: u64,
+    pub disk_write: u64,
+    pub cwd: String,
+    pub env: Vec<String>,
 }
 
 pub enum SortBy {
@@ -41,6 +51,7 @@ impl MySystem {
     pub fn new_all() -> MySystem {
         MySystem {
             sys: System::new_all(),
+            net: Networks::new_with_refreshed_list(),
         }
     }
 
@@ -87,6 +98,23 @@ impl MySystem {
         ret
     }
 
+    pub fn memory_usage(&mut self) -> (u64, u64) {
+        self.sys
+            .refresh_memory_specifics(sysinfo::MemoryRefreshKind::new().with_ram());
+        (self.sys.total_memory(), self.sys.available_memory())
+    }
+
+    pub fn network_usage(&mut self) -> (u64, u64) {
+        self.net.refresh();
+        let mut rx = 0;
+        let mut tx = 0;
+        for iface in &self.net {
+            rx += iface.1.received();
+            tx += iface.1.transmitted();
+        }
+        (rx, tx)
+    }
+
     pub fn send_signal(&self, pid: u32, signal: Signal) -> bool {
         self.sys
             .process(Pid::from_u32(pid))
@@ -99,6 +127,40 @@ impl MySystem {
                 Signal::Interrupt => p.kill_with(sysinfo::Signal::Interrupt),
             })
             .unwrap_or(false)
+    }
+
+    pub fn process_details(&self, pid: u32) -> Option<ProcessDetails> {
+        let Some(p) = self.sys.process(Pid::from_u32(pid)) else {
+            return None;
+        };
+        let cmd = p
+            .cmd()
+            .join(&std::ffi::OsString::from(" "))
+            .to_str()
+            .unwrap()
+            .to_string();
+        let disk_read = p.disk_usage().total_read_bytes;
+        let disk_write = p.disk_usage().total_written_bytes;
+
+        let env: Vec<String> = p
+            .environ()
+            .iter()
+            .map(|e| e.as_os_str().to_str().unwrap().to_string())
+            .collect();
+        let cwd = p
+            .cwd()
+            .map(|p| p.to_str().unwrap().to_string())
+            .unwrap_or_default();
+        let virtual_memory = p.virtual_memory();
+
+        Some(ProcessDetails {
+            cmd,
+            disk_read,
+            disk_write,
+            virtual_memory,
+            cwd,
+            env,
+        })
     }
 
     pub fn parent_pid(&self, pid: u32) -> Option<u32> {

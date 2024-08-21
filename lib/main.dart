@@ -64,6 +64,8 @@ class _MainPageState extends State<MainPage> {
   SortBy sortBy = SortBy.cpu;
   SortOrder sortOrder = SortOrder.desc;
   final ContextMenuController _contextMenuController = ContextMenuController();
+  (BigInt, BigInt) memoryUsage = (BigInt.zero, BigInt.zero);
+  (BigInt, BigInt) networkUsage = (BigInt.zero, BigInt.zero);
 
   late final AppLifecycleListener _listener;
 
@@ -110,6 +112,8 @@ class _MainPageState extends State<MainPage> {
     sys ??= await MySystem.newAll();
 
     processes = await sys!.processes(sorting: sortBy, sortOrder: sortOrder);
+    memoryUsage = await sys!.memoryUsage();
+    networkUsage = await sys!.networkUsage();
 
     reloadProcesses = false;
     return processes;
@@ -144,22 +148,6 @@ class _MainPageState extends State<MainPage> {
         ),
       ),
     );
-  }
-
-  String memoryString(BigInt memory) {
-    // ignore: constant_identifier_names
-    const int GB = 1024 * 1024 * 1024;
-    // ignore: constant_identifier_names
-    const int MB = 1024 * 1024;
-    // ignore: constant_identifier_names
-    const int KB = 1024;
-    if (memory.toInt() > GB) {
-      return "${(memory.toInt() / GB).toStringAsFixed(1)}G";
-    } else if (memory.toInt() > MB) {
-      return "${(memory.toInt() / MB).toStringAsFixed(1)}M";
-    } else {
-      return "${(memory.toInt() / KB).toStringAsFixed(1)}K";
-    }
   }
 
   String _getCpuUsage(double cpu) {
@@ -320,6 +308,24 @@ class _MainPageState extends State<MainPage> {
               ContextMenuController.removeAny();
               sys!.sendSignal(pid: selectedPid, signal: Signal.terminate);
             }),
+        MenuItemButton(
+            leadingIcon: const Icon(Icons.details),
+            child: const Text("Process Details"),
+            onPressed: () async {
+              ContextMenuController.removeAny();
+              final details = await sys!.processDetails(pid: selectedPid);
+              if (details == null) return;
+              if (!context.mounted) return;
+              showDialog(
+                  barrierDismissible: true,
+                  context: context,
+                  builder: (context) {
+                    int x = processes.indexWhere((p) {
+                      return p.pid == selectedPid;
+                    });
+                    return ProcessDetailsDialog(processes[x].name, details);
+                  });
+            }),
       ],
     );
   }
@@ -361,6 +367,10 @@ class _MainPageState extends State<MainPage> {
         },
       ),
       persistentFooterButtons: [
+        Text(
+            "↓↑${memoryString(networkUsage.$1)}/${memoryString(networkUsage.$2)}"),
+        const Text("RAM:", style: TextStyle(fontWeight: FontWeight.bold)),
+        Text("${memoryString(memoryUsage.$2)}/${memoryString(memoryUsage.$1)}"),
         ElevatedButton.icon(
           icon: const Icon(Icons.close),
           label: const Text("End Process"),
@@ -372,5 +382,86 @@ class _MainPageState extends State<MainPage> {
         )
       ],
     );
+  }
+}
+
+class ProcessDetailsDialog extends StatelessWidget {
+  final ProcessDetails details;
+  final String processName;
+
+  const ProcessDetailsDialog(this.processName, this.details, {super.key});
+
+  Widget row(String key, String value) {
+    return Row(
+      children: [
+        Text(key, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(value)
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(processName),
+      actions: [
+        ElevatedButton.icon(
+          icon: const Icon(Icons.close),
+          label: const Text("Close"),
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+        )
+      ],
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width,
+        height: MediaQuery.of(context).size.height,
+        child: SelectionArea(
+          child: ListView(
+            children: [
+              row("Command: ", details.cmd),
+              const SizedBox(height: 4),
+              row("Working Directory: ", details.cwd),
+              const SizedBox(height: 4),
+              row("Total Disk Read: ", memoryString(details.diskRead)),
+              const SizedBox(height: 4),
+              row("Total Disk Write: ", memoryString(details.diskWrite)),
+              const SizedBox(height: 4),
+              row("Virtual Memory: ", memoryString(details.virtualMemory)),
+              const SizedBox(height: 4),
+              const Text("Environment: ",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              // for (final row in details.env) Text(row)
+
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: details.env.length,
+                padding: EdgeInsets.zero,
+                itemBuilder: (context, index) {
+                  return ListTile(dense: true, title: Text(details.env[index]));
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String memoryString(BigInt memory) {
+  // ignore: constant_identifier_names
+  const int GB = 1024 * 1024 * 1024;
+  // ignore: constant_identifier_names
+  const int MB = 1024 * 1024;
+  // ignore: constant_identifier_names
+  const int KB = 1024;
+  if (memory.toInt() > GB) {
+    return "${(memory.toInt() / GB).toStringAsFixed(1)}G";
+  } else if (memory.toInt() > MB) {
+    return "${(memory.toInt() / MB).toStringAsFixed(1)}M";
+  } else {
+    return "${(memory.toInt() / KB).toStringAsFixed(1)}K";
   }
 }
