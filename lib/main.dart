@@ -6,6 +6,9 @@ import 'package:sysmonitor/src/rust/api/simple.dart';
 import 'package:sysmonitor/src/rust/frb_generated.dart';
 import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
 
+import 'process_details.dart';
+import 'utils.dart';
+
 extension SignalName on Signal {
   String get signalName {
     return switch (this) {
@@ -58,6 +61,7 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   late Timer t;
   MySystem? sys;
+  List<MyProcess> allProcesses = [];
   List<MyProcess> processes = [];
   int selectedPid = -1;
   bool reloadProcesses = false;
@@ -66,6 +70,7 @@ class _MainPageState extends State<MainPage> {
   final ContextMenuController _contextMenuController = ContextMenuController();
   (BigInt, BigInt) memoryUsage = (BigInt.zero, BigInt.zero);
   (BigInt, BigInt) networkUsage = (BigInt.zero, BigInt.zero);
+  String filterString = "";
 
   late final AppLifecycleListener _listener;
 
@@ -111,12 +116,29 @@ class _MainPageState extends State<MainPage> {
 
     sys ??= await MySystem.newAll();
 
-    processes = await sys!.processes(sorting: sortBy, sortOrder: sortOrder);
+    allProcesses = await sys!.processes(sorting: sortBy, sortOrder: sortOrder);
     memoryUsage = await sys!.memoryUsage();
     networkUsage = await sys!.networkUsage();
+    filterProcesses();
 
     reloadProcesses = false;
     return processes;
+  }
+
+  void filterProcesses() {
+    if (filterString.isEmpty) {
+      processes = [...allProcesses];
+      return;
+    }
+    int? pid = int.tryParse(filterString);
+    if (pid != null) {
+      processes = allProcesses.where((p) => p.pid == pid).toList();
+    } else {
+      final filterLowered = filterString.toLowerCase();
+      processes = allProcesses
+          .where((p) => p.name.toLowerCase().contains(filterLowered))
+          .toList();
+    }
   }
 
   void updateSorting(SortBy newSortBy) {
@@ -323,6 +345,7 @@ class _MainPageState extends State<MainPage> {
                     int x = processes.indexWhere((p) {
                       return p.pid == selectedPid;
                     });
+                    if (x == -1) return Text("Pid $selectedPid no found");
                     return ProcessDetailsDialog(processes[x].name, details);
                   });
             }),
@@ -341,7 +364,6 @@ class _MainPageState extends State<MainPage> {
         future: getProcessList(),
         builder: (context, snapshot) {
           if (snapshot.hasData) {
-            final data = snapshot.data!;
             return Scrollbar(
               controller: hscroll,
               child: Scrollbar(
@@ -352,7 +374,7 @@ class _MainPageState extends State<MainPage> {
                   horizontalDetails:
                       ScrollableDetails.horizontal(controller: hscroll),
                   columnCount: 4,
-                  rowCount: data.length + 1,
+                  rowCount: processes.length + 1,
                   pinnedRowCount: 1,
                   rowBuilder: _buildRowSpan,
                   columnBuilder: _buildColumnSpan,
@@ -367,8 +389,28 @@ class _MainPageState extends State<MainPage> {
         },
       ),
       persistentFooterButtons: [
+        SizedBox(
+          width: 240,
+          child: TextField(
+            maxLines: 1,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.search),
+              labelText: "Search",
+            ),
+            onChanged: (value) {
+              if (value.length == 1) return;
+              setState(() {
+                filterString = value;
+                filterProcesses();
+              });
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
         Text(
             "↓↑${memoryString(networkUsage.$1)}/${memoryString(networkUsage.$2)}"),
+        const SizedBox(width: 8),
         const Text("RAM:", style: TextStyle(fontWeight: FontWeight.bold)),
         Text("${memoryString(memoryUsage.$2)}/${memoryString(memoryUsage.$1)}"),
         ElevatedButton.icon(
@@ -382,86 +424,5 @@ class _MainPageState extends State<MainPage> {
         )
       ],
     );
-  }
-}
-
-class ProcessDetailsDialog extends StatelessWidget {
-  final ProcessDetails details;
-  final String processName;
-
-  const ProcessDetailsDialog(this.processName, this.details, {super.key});
-
-  Widget row(String key, String value) {
-    return Row(
-      children: [
-        Text(key, style: const TextStyle(fontWeight: FontWeight.bold)),
-        Text(value)
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(processName),
-      actions: [
-        ElevatedButton.icon(
-          icon: const Icon(Icons.close),
-          label: const Text("Close"),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-        )
-      ],
-      content: SizedBox(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.height,
-        child: SelectionArea(
-          child: ListView(
-            children: [
-              row("Command: ", details.cmd),
-              const SizedBox(height: 4),
-              row("Working Directory: ", details.cwd),
-              const SizedBox(height: 4),
-              row("Total Disk Read: ", memoryString(details.diskRead)),
-              const SizedBox(height: 4),
-              row("Total Disk Write: ", memoryString(details.diskWrite)),
-              const SizedBox(height: 4),
-              row("Virtual Memory: ", memoryString(details.virtualMemory)),
-              const SizedBox(height: 4),
-              const Text("Environment: ",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              // for (final row in details.env) Text(row)
-
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: details.env.length,
-                padding: EdgeInsets.zero,
-                itemBuilder: (context, index) {
-                  return ListTile(dense: true, title: Text(details.env[index]));
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-String memoryString(BigInt memory) {
-  // ignore: constant_identifier_names
-  const int GB = 1024 * 1024 * 1024;
-  // ignore: constant_identifier_names
-  const int MB = 1024 * 1024;
-  // ignore: constant_identifier_names
-  const int KB = 1024;
-  if (memory.toInt() > GB) {
-    return "${(memory.toInt() / GB).toStringAsFixed(1)}G";
-  } else if (memory.toInt() > MB) {
-    return "${(memory.toInt() / MB).toStringAsFixed(1)}M";
-  } else {
-    return "${(memory.toInt() / KB).toStringAsFixed(1)}K";
   }
 }
