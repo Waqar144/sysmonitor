@@ -101,7 +101,7 @@ impl MySystem {
     pub fn memory_usage(&mut self) -> (u64, u64) {
         self.sys
             .refresh_memory_specifics(sysinfo::MemoryRefreshKind::new().with_ram());
-        (self.sys.total_memory(), self.sys.available_memory())
+        (self.sys.total_memory(), self.sys.used_memory())
     }
 
     pub fn network_usage(&mut self) -> (u64, u64) {
