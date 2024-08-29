@@ -191,7 +191,7 @@ class _MainPageState extends State<MainPage> {
     if (row == 0) {
       return TableViewCell(
         child: switch (column) {
-          0 => _createHeaderItem("PID", SortBy.name),
+          0 => _createHeaderItem("PID", SortBy.pid),
           1 => _createHeaderItem("Name", SortBy.name),
           2 => _createHeaderItem("CPU", SortBy.cpu),
           3 => _createHeaderItem("Memory", SortBy.memory),
