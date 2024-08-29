@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sysmonitor/src/rust/api/simple.dart';
 import 'package:sysmonitor/src/rust/frb_generated.dart';
 import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
@@ -71,6 +72,7 @@ class _MainPageState extends State<MainPage> {
   (BigInt, BigInt) memoryUsage = (BigInt.zero, BigInt.zero);
   (BigInt, BigInt) networkUsage = (BigInt.zero, BigInt.zero);
   String filterString = "";
+  final FocusNode _searchFocusNode = FocusNode();
 
   late final AppLifecycleListener _listener;
 
@@ -90,6 +92,7 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    _searchFocusNode.dispose();
     _listener.dispose();
     super.dispose();
   }
@@ -358,71 +361,93 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // appBar: AppBar(title: const Text('')),
-      body: FutureBuilder(
-        future: getProcessList(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return Scrollbar(
-              controller: hscroll,
-              child: Scrollbar(
-                controller: vscroll,
-                child: TableView.builder(
-                  verticalDetails:
-                      ScrollableDetails.vertical(controller: vscroll),
-                  horizontalDetails:
-                      ScrollableDetails.horizontal(controller: hscroll),
-                  columnCount: 4,
-                  rowCount: processes.length + 1,
-                  pinnedRowCount: 1,
-                  rowBuilder: _buildRowSpan,
-                  columnBuilder: _buildColumnSpan,
-                  cellBuilder: _buildCell,
-                ),
-              ),
-            );
-          } else if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}"));
-          }
-          return const Center(child: Text("Loading"));
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+          _searchFocusNode.requestFocus();
         },
-      ),
-      persistentFooterButtons: [
-        SizedBox(
-          width: 240,
-          child: TextField(
-            maxLines: 1,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.search),
-              labelText: "Search",
-            ),
-            onChanged: (value) {
-              if (value.length == 1) return;
-              setState(() {
-                filterString = value;
-                filterProcesses();
-              });
+        const SingleActivator(LogicalKeyboardKey.arrowUp): () {
+          int x = processes.indexWhere((p) => p.pid == selectedPid);
+          if (x != -1 && x > 0) _onRowTapped(processes[x - 1].pid);
+        },
+        const SingleActivator(LogicalKeyboardKey.arrowDown): () {
+          int x = processes.indexWhere((p) => p.pid == selectedPid);
+          if (x != -1 && x < processes.length - 1) {
+            _onRowTapped(processes[x + 1].pid);
+          }
+        }
+      },
+      child: FocusScope(
+        child: Scaffold(
+          // appBar: AppBar(title: const Text('')),
+          body: FutureBuilder(
+            future: getProcessList(),
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                return Scrollbar(
+                  controller: hscroll,
+                  child: Scrollbar(
+                    controller: vscroll,
+                    child: TableView.builder(
+                      verticalDetails:
+                          ScrollableDetails.vertical(controller: vscroll),
+                      horizontalDetails:
+                          ScrollableDetails.horizontal(controller: hscroll),
+                      columnCount: 4,
+                      rowCount: processes.length + 1,
+                      pinnedRowCount: 1,
+                      rowBuilder: _buildRowSpan,
+                      columnBuilder: _buildColumnSpan,
+                      cellBuilder: _buildCell,
+                    ),
+                  ),
+                );
+              } else if (snapshot.hasError) {
+                return Center(child: Text("Error: ${snapshot.error}"));
+              }
+              return const Center(child: Text("Loading"));
             },
           ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-            "↓↑${memoryString(networkUsage.$1)}/${memoryString(networkUsage.$2)}"),
-        const SizedBox(width: 8),
-        const Text("RAM:", style: TextStyle(fontWeight: FontWeight.bold)),
-        Text("${memoryString(memoryUsage.$2)}/${memoryString(memoryUsage.$1)}"),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.close),
-          label: const Text("End Process"),
-          onPressed: selectedPid == -1
-              ? null
-              : () {
-                  sys?.sendSignal(pid: selectedPid, signal: Signal.terminate);
+          persistentFooterButtons: [
+            Text(
+                "↓↑${memoryString(networkUsage.$1)}/${memoryString(networkUsage.$2)}"),
+            const Text("RAM:", style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+                "${memoryString(memoryUsage.$2)}/${memoryString(memoryUsage.$1)}"),
+            SizedBox(
+              width: 240,
+              child: TextField(
+                autofocus: true,
+                focusNode: _searchFocusNode,
+                maxLines: 1,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.search),
+                  labelText: "Search",
+                ),
+                onChanged: (value) {
+                  if (value.length == 1) return;
+                  setState(() {
+                    filterString = value;
+                    filterProcesses();
+                  });
                 },
-        )
-      ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.close),
+              label: const Text("End Process"),
+              onPressed: selectedPid == -1
+                  ? null
+                  : () {
+                      sys?.sendSignal(
+                          pid: selectedPid, signal: Signal.terminate);
+                    },
+            )
+          ],
+        ),
+      ),
     );
   }
 }
