@@ -291,24 +291,22 @@ class _MainPageState extends State<MainPage> {
         primaryAnchor: offset,
       ),
       children: [
-        MenuItemButton(
-          child: SubmenuButton(
-            alignmentOffset: const Offset(150, 0),
-            menuChildren: [
-              ...Signal.values.map((s) {
-                return MenuItemButton(
-                  child: Text(s.signalName),
-                  onPressed: () {
-                    ContextMenuController.removeAny();
-                    sys!.sendSignal(pid: selectedPid, signal: s);
-                  },
-                );
-              })
-            ],
-            leadingIcon: const SizedBox(width: 16),
-            trailingIcon: const Icon(Icons.arrow_right),
-            child: const Text("Send Signal"),
-          ),
+        SubmenuButton(
+          alignmentOffset: const Offset(150, 0),
+          menuChildren: [
+            ...Signal.values.map((s) {
+              return MenuItemButton(
+                child: Text(s.signalName),
+                onPressed: () {
+                  ContextMenuController.removeAny();
+                  sys!.sendSignal(pid: selectedPid, signal: s);
+                },
+              );
+            })
+          ],
+          leadingIcon: const SizedBox(width: 16),
+          trailingIcon: const Icon(Icons.arrow_right),
+          child: const Text("Send Signal"),
         ),
         MenuItemButton(
             leadingIcon: const Icon(Icons.move_up),
