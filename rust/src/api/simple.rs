@@ -89,10 +89,10 @@ impl MySystem {
                 ret.sort_by(|l, r| r.cpu_usage.partial_cmp(&l.cpu_usage).unwrap())
             }
             (SortBy::Memory, SortOrder::Asc) => {
-                ret.sort_by(|l, r| r.memory_usage.cmp(&l.memory_usage))
+                ret.sort_by(|l, r| l.memory_usage.cmp(&r.memory_usage))
             }
             (SortBy::Memory, SortOrder::Desc) => {
-                ret.sort_by(|l, r| l.memory_usage.cmp(&r.memory_usage))
+                ret.sort_by(|l, r| r.memory_usage.cmp(&l.memory_usage))
             }
         }
         ret
