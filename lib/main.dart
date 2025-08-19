@@ -80,6 +80,7 @@ class _MainPageState extends State<MainPage> {
   List<MyProcess> processes = [];
   int selectedPid = -1;
   bool reloadProcesses = false;
+  bool _pauseUpdates = false;
   SortBy sortBy = SortBy.cpu;
   SortOrder sortOrder = SortOrder.desc;
   final ContextMenuController _contextMenuController = ContextMenuController();
@@ -124,7 +125,7 @@ class _MainPageState extends State<MainPage> {
   }
 
   Future<List<MyProcess>> getProcessList() async {
-    if (!reloadProcesses) {
+    if (!reloadProcesses || _pauseUpdates) {
       return processes;
     }
 
@@ -454,6 +455,13 @@ class _MainPageState extends State<MainPage> {
               ),
             ),
             const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.pause),
+              tooltip: "Pause/Unpause updates",
+              onPressed: () {
+                setState(() => _pauseUpdates = !_pauseUpdates);
+              },
+            ),
             ElevatedButton.icon(
               icon: const Icon(Icons.close),
               label: const Text("End Process"),
