@@ -129,10 +129,19 @@ impl MySystem {
             .unwrap_or(false)
     }
 
-    pub fn process_details(&self, pid: u32) -> Option<ProcessDetails> {
-        let Some(p) = self.sys.process(Pid::from_u32(pid)) else {
+    pub fn process_details(&mut self, pid: u32) -> Option<ProcessDetails> {
+        let sysinfo_pid = Pid::from_u32(pid);
+
+        // Update the process data
+        self.sys.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::Some(&[sysinfo_pid]),
+            sysinfo::ProcessRefreshKind::everything(),
+        );
+
+        let Some(p) = self.sys.process(sysinfo_pid) else {
             return None;
         };
+
         let cmd = p
             .cmd()
             .join(&std::ffi::OsString::from(" "))

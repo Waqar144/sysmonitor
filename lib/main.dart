@@ -10,6 +10,20 @@ import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
 import 'process_details.dart';
 import 'utils.dart';
 
+void showSnackBarMessage(
+  BuildContext context,
+  String message, {
+  bool error = false,
+}) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      duration: Duration(seconds: error ? 5 : 2),
+      backgroundColor: error ? Colors.red : Colors.blue,
+    ),
+  );
+}
+
 extension SignalName on Signal {
   String get signalName {
     return switch (this) {
@@ -337,8 +351,15 @@ class _MainPageState extends State<MainPage> {
             onPressed: () async {
               ContextMenuController.removeAny();
               final details = await sys!.processDetails(pid: selectedPid);
-              if (details == null) return;
               if (!context.mounted) return;
+
+              if (details == null) {
+                showSnackBarMessage(
+                    context, "Failed to get process details for $selectedPid",
+                    error: true);
+                return;
+              }
+
               showDialog(
                   barrierDismissible: true,
                   context: context,
